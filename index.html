@@ -14,9 +14,27 @@ button,input,select,textarea{font:inherit} button{cursor:pointer} .app{min-heigh
 @media print{body{background:#fff}.sidebar,.topbar,.no-print,.toast,.modal-backdrop{display:none!important}.main{margin:0}.content{padding:0}.section{display:none!important}.section.print-show{display:block!important}.card{box-shadow:none;border-color:#ddd}.print-area{display:block}.competency{break-inside:avoid}}
 
 .one-card{grid-template-columns:minmax(0,1fr)}
+
+/* Bloqueio programado de acesso */
+.scheduled-lock{display:none;position:fixed;inset:0;z-index:99999;align-items:center;justify-content:center;padding:22px;background:rgba(2,18,42,.78);backdrop-filter:blur(8px)}
+.scheduled-lock.visible{display:flex}.scheduled-lock-card{width:min(510px,100%);background:#fff;border-radius:22px;box-shadow:0 28px 80px rgba(0,0,0,.34);overflow:hidden;text-align:center}.scheduled-lock-top{height:7px;background:linear-gradient(90deg,#002E6A,#2563EB)}
+.scheduled-lock-inner{padding:36px 30px 32px}.scheduled-lock-icon{width:68px;height:68px;margin:0 auto 18px;border-radius:50%;display:grid;place-items:center;background:#EAF1F8;color:#002E6A;font-size:31px}.scheduled-lock h2{margin:0;color:#102A4C;font-size:24px;letter-spacing:-.4px}.scheduled-lock p{margin:12px auto 0;max-width:390px;color:#526176;line-height:1.6}.scheduled-lock-time{margin-top:20px;padding:14px;border-radius:12px;background:#F5F8FC;color:#002E6A;font-weight:800}.scheduled-lock small{display:block;margin-top:16px;color:#77859a;font-size:12px}
 </style>
 </head>
 <body>
+<div id="scheduledLock" class="scheduled-lock" role="dialog" aria-modal="true" aria-labelledby="scheduledLockTitle">
+  <div class="scheduled-lock-card">
+    <div class="scheduled-lock-top"></div>
+    <div class="scheduled-lock-inner">
+      <div class="scheduled-lock-icon">🔒</div>
+      <h2 id="scheduledLockTitle">Sistema temporariamente bloqueado</h2>
+      <p>O período de acesso foi encerrado. Nenhuma ação pode ser realizada neste momento.</p>
+      <div class="scheduled-lock-time">Acesso liberado amanhã, 01/07/2026, às 08:00.</div>
+      <small>Esta tela será atualizada automaticamente quando o sistema for liberado.</small>
+    </div>
+  </div>
+</div>
+
 <div class="app">
 <aside class="sidebar">
   <div class="brand"><b>Avalia+</b><span>Desempenho por competências</span></div>
@@ -129,7 +147,23 @@ function exportEmployeesCSV(){exportCSV('colaboradores.csv',[['Nome','Matrícula
 function exportEvaluationsCSV(){const rows=[['Colaborador','Matrícula','Cargo','Área','Período','Data','Avaliador','Tipo','Média','Classificação','Status','Pontos fortes','Oportunidades','Plano de desenvolvimento']];state.evaluations.forEach(e=>{const emp=state.employees.find(x=>x.id===e.employeeId)||{};const a=evaluationAverages(e).avg;rows.push([emp.nome||e.employeeName,emp.matricula||'',emp.cargo||'',emp.area||'',e.period,e.date,e.evaluator,e.type,a?a.toFixed(2):'',classInfo(a).name,e.status,e.strengths,e.opportunities,e.plan])});exportCSV('avaliacoes_desempenho.csv',rows);toast('CSV de avaliações exportado.')}
 function exportExcelHTML(){const rows=state.evaluations.map(e=>{const emp=state.employees.find(x=>x.id===e.employeeId)||{};const a=evaluationAverages(e).avg;return `<tr><td>${esc(emp.nome||e.employeeName)}</td><td>${esc(emp.matricula||'')}</td><td>${esc(emp.cargo||'')}</td><td>${esc(emp.area||'')}</td><td>${esc(e.period)}</td><td>${a?a.toFixed(2):''}</td><td>${esc(classInfo(a).name)}</td></tr>`}).join('');const html=`<html><meta charset="utf-8"><table border="1"><thead><tr><th>Colaborador</th><th>Matrícula</th><th>Cargo</th><th>Área</th><th>Período</th><th>Média</th><th>Classificação</th></tr></thead><tbody>${rows}</tbody></table></html>`;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([html],{type:'application/vnd.ms-excel'}));a.download='relatorio_avaliacoes.xls';a.click();URL.revokeObjectURL(a.href);toast('Arquivo compatível com Excel exportado.')}
 function exportBackup(){const data={version:'1.0',generatedAt:new Date().toISOString(),employees:state.employees,evaluations:state.evaluations,settings:state.settings};const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download='backup_avalia_mais.json';a.click();URL.revokeObjectURL(a.href);toast('Backup exportado.')}
-function importBackup(ev){const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!Array.isArray(d.employees)||!Array.isArray(d.evaluations))throw Error();if(!confirm('Importar o backup e substituir os dados atuais deste navegador?'))return;state.employees=d.employees;state.evaluations=d.evaluations;state.settings=d.settings||{};persist();init();renderAll();toast('Backup importado com sucesso.')}catch{toast('Arquivo de backup inválido.')}};r.readAsText(f);ev.target.value=''}
+function importBackup(ev){const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!Array.isArray(d.employees)||!Array.isArray(d.evaluations))throw Error();if(!confirm('Importar o backup e substituir os dados atuais deste navegador?'))return;state.employees=d.employees;state.evaluations=d.evaluations;state.settings=d.settings||{};persist();
+// Bloqueio programado: 30/06/2026, 20:45 até 01/07/2026, 08:00 (horário local do dispositivo).
+const SCHEDULED_LOCK_START = new Date(2026, 5, 30, 20, 45, 0);
+const SCHEDULED_LOCK_END = new Date(2026, 6, 1, 8, 0, 0);
+function applyScheduledAccessLock(){
+  const now = new Date();
+  const locked = now >= SCHEDULED_LOCK_START && now < SCHEDULED_LOCK_END;
+  const overlay = document.getElementById('scheduledLock');
+  if(!overlay) return;
+  overlay.classList.toggle('visible', locked);
+  document.documentElement.style.overflow = locked ? 'hidden' : '';
+  document.body.style.overflow = locked ? 'hidden' : '';
+}
+applyScheduledAccessLock();
+setInterval(applyScheduledAccessLock, 15000);
+
+init();renderAll();toast('Backup importado com sucesso.')}catch{toast('Arquivo de backup inválido.')}};r.readAsText(f);ev.target.value=''}
 function clearAllData(){if(!confirm('Deseja realmente excluir todos os dados locais?'))return;if(!confirm('Confirmação final: esta ação apagará colaboradores e avaliações deste navegador.'))return;Object.values(STORAGE).forEach(k=>localStorage.removeItem(k));state={employees:[],evaluations:[],settings:{},answers:{},notes:{}};init();resetEvaluation();renderAll();toast('Todos os dados locais foram excluídos.')}
 function saveSettings(){state.settings={companyName:$('companyName').value.trim(),defaultPeriod:$('defaultPeriod').value.trim()};persist();if(!$('evalPeriod').value)$('evalPeriod').value=state.settings.defaultPeriod;toast('Configurações salvas.')}
 function printEvaluation(eid){const e=state.evaluations.find(x=>x.id===eid);if(!e)return;const emp=state.employees.find(x=>x.id===e.employeeId)||{nome:e.employeeName,matricula:'—',cargo:'—',area:'—'};const {comps,avg}=evaluationAverages(e);const html=`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Avaliação — ${esc(emp.nome)}</title><style>body{font-family:Arial,sans-serif;color:#1F2937;padding:34px}h1{color:#002E6A}h2{margin-top:26px;border-bottom:1px solid #ddd;padding-bottom:7px}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #ddd;padding:9px;text-align:left}th{background:#EAF1F8}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.box{border:1px solid #ddd;border-radius:8px;padding:12px}p{white-space:pre-line;line-height:1.5}</style></head><body><h1>Avaliação de Desempenho por Competências</h1><div class="grid"><div class="box"><b>Colaborador</b><br>${esc(emp.nome)}<br>${esc(emp.cargo)} · ${esc(emp.area)}<br>Matrícula: ${esc(emp.matricula)}</div><div class="box"><b>Período</b><br>${esc(e.period)}<br>Avaliador: ${esc(e.evaluator)}<br>Tipo: ${esc(e.type)}<br>Data: ${esc(e.date)}</div></div><h2>Resultado geral: ${avg?avg.toFixed(2):'—'} — ${esc(classInfo(avg).name)}</h2><table><thead><tr><th>Competência</th><th>Média</th></tr></thead><tbody>${comps.map(c=>`<tr><td>${esc(c.name)}</td><td>${c.avg.toFixed(2)}</td></tr>`).join('')}</tbody></table><h2>Síntese</h2><b>Pontos fortes</b><p>${esc(e.strengths||'Não informado.')}</p><b>Oportunidades de melhoria</b><p>${esc(e.opportunities||'Não informado.')}</p><b>Plano de desenvolvimento</b><p>${esc(e.plan||'Não informado.')}</p><b>Comentário do avaliador</b><p>${esc(e.evaluatorComment||'Não informado.')}</p><b>Comentário do colaborador</b><p>${esc(e.employeeComment||'Não informado.')}</p><script>window.onload=()=>window.print()<\/script></body></html>`;const w=window.open('','_blank');w.document.write(html);w.document.close()}
